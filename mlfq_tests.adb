@@ -132,7 +132,14 @@ procedure MLFQ_Tests is
       
       -- Add process to queue 2 (lower priority)
       Add_Process (S, ID => 1, CPU_Time => 100, IO_Frequency => 0, IO_Duration => 0);
-      S.Running_Proc.Priority := 2;  -- Force it to queue 2
+      
+      -- Manually move process 1 from queue 1 to running state with priority 2
+      -- First remove it from queue 1
+      if not S.Queues(1).Is_Empty then
+         S.Running_Proc := S.Queues(1).First_Element;
+         S.Queues(1).Delete_First;
+      end if;
+      S.Running_Proc.Priority := 2;
       S.Running_Proc.State := Running;
       S.Is_Idle := False;
       
@@ -200,7 +207,8 @@ procedure MLFQ_Tests is
       else
          Put_Line ("[FAIL] Test 6: Blocked process should wake up (State=" & 
                    Process_State'Image(P.State) & ", Current_IO_Wait=" & 
-                   Natural'Image(P.Current_IO_Wait) & ")");
+                   Natural'Image(P.Current_IO_Wait) & ", Ticks_Since_Yield=" & 
+                   Natural'Image(P.Ticks_Since_Yield) & ")");
       end if;
    end Test_IO_Wakeup;
 
