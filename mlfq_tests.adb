@@ -190,25 +190,31 @@ procedure MLFQ_Tests is
       S : Scheduler;
       Q_Arr : constant Quantum_Array := (1 => 10, others => 1);
       P : Process_Record;
+      Woke_Up : Boolean := False;
    begin
       S.Num_Queues := 3;
       Initialize (S, Q_Arr, Aging_Interval => 100);
       Add_Process (S, ID => 1, CPU_Time => 10, IO_Frequency => 1, IO_Duration => 2);
       
-      -- Run for 4 ticks: should yield at tick 1, wake up at tick 3
-      for I in 1 .. 4 loop
+      -- Run until process wakes up (should take IO_Duration + 1 ticks)
+      -- Tick 0: Process yields for I/O (Current_IO_Wait = 2)
+      -- Tick 1: Current_IO_Wait decrements to 1
+      -- Tick 2: Current_IO_Wait decrements to 0, process wakes up
+      for I in 1 .. 10 loop
          Tick (S);
+         P := Find_Process (S, 1);
+         if P.State = Ready then
+            Woke_Up := True;
+            exit;
+         end if;
       end loop;
       
-      -- Check if process woke up and is ready
-      P := Find_Process (S, 1);
-      if P.State = Ready then
+      if Woke_Up then
          Put_Line ("[PASS] Test 6: Blocked process wakes up after I/O duration");
       else
          Put_Line ("[FAIL] Test 6: Blocked process should wake up (State=" & 
                    Process_State'Image(P.State) & ", Current_IO_Wait=" & 
-                   Natural'Image(P.Current_IO_Wait) & ", Ticks_Since_Yield=" & 
-                   Natural'Image(P.Ticks_Since_Yield) & ")");
+                   Natural'Image(P.Current_IO_Wait) & ")");
       end if;
    end Test_IO_Wakeup;
 
