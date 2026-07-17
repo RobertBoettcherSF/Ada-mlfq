@@ -3,7 +3,7 @@ with Ada.Text_IO; use Ada.Text_IO;
 package body MLFQ is
 
    procedure Initialize (S              : in out Scheduler;
-                         Quantums       : in array (Natural range <>) of Natural;
+                         Quantums       : in array (Positive range <>) of Natural;
                          Aging_Interval : in Natural) is
    begin
       -- Clear any existing state
@@ -37,16 +37,16 @@ package body MLFQ is
    begin
       P.ID := ID;
       P.State := Ready;
-      P.Priority := 0; -- Rule 3: Enter at highest priority
+      P.Priority := 1; -- Rule 3: Enter at highest priority (queue 1)
       P.CPU_Time_Needed := CPU_Time;
       P.CPU_Time_Used := 0;
-      P.Allotment_Left := S.Quantums(0);
+      P.Allotment_Left := S.Quantums(1);
       P.IO_Frequency := IO_Frequency;
       P.IO_Duration := IO_Duration;
       P.Current_IO_Wait := 0;
       P.Ticks_Since_Yield := 0;
 
-      S.Queues(0).Append (P);
+      S.Queues(1).Append (P);
    end Add_Process;
 
    procedure Tick (S : in out Scheduler) is
@@ -57,27 +57,27 @@ package body MLFQ is
       S.Ticks_Since_Aging := S.Ticks_Since_Aging + 1;
       if S.Aging_Interval > 0 and then S.Ticks_Since_Aging >= S.Aging_Interval then
          S.Ticks_Since_Aging := 0;
-         Put_Line ("--- AGING TRIGGERED: Boosting all processes to Queue 0 ---");
+         Put_Line ("--- AGING TRIGGERED: Boosting all processes to Queue 1 ---");
 
          -- Preempt running process
          if not S.Is_Idle then
-            S.Running_Proc.Priority := 0;
-            S.Running_Proc.Allotment_Left := S.Quantums(0);
+            S.Running_Proc.Priority := 1;
+            S.Running_Proc.Allotment_Left := S.Quantums(1);
             S.Running_Proc.State := Ready;
-            S.Queues(0).Append (S.Running_Proc);
+            S.Queues(1).Append (S.Running_Proc);
             S.Is_Idle := True;
          end if;
 
-         -- Elevate all lower queue processes to Priority 0
-         for Q in 1 .. S.Num_Queues - 1 loop
+         -- Elevate all lower queue processes to Priority 1
+         for Q in 2 .. S.Num_Queues loop
             while not S.Queues(Q).Is_Empty loop
                declare
                   P : Process_Record := S.Queues(Q).First_Element;
                begin
                   S.Queues(Q).Delete_First;
-                  P.Priority := 0;
-                  P.Allotment_Left := S.Quantums(0);
-                  S.Queues(0).Append (P);
+                  P.Priority := 1;
+                  P.Allotment_Left := S.Quantums(1);
+                  S.Queues(1).Append (P);
                end;
             end loop;
          end loop;
@@ -88,8 +88,8 @@ package body MLFQ is
             declare
                P : Process_Record := Element (C);
             begin
-               P.Priority := 0;
-               P.Allotment_Left := S.Quantums(0);
+               P.Priority := 1;
+               P.Allotment_Left := S.Quantums(1);
                S.Blocked_List.Replace_Element (C, P);
             end;
             C := Next (C);
@@ -122,7 +122,7 @@ package body MLFQ is
          declare
             Highest_Ready : Integer := -1;
          begin
-            for Q in 0 .. S.Num_Queues - 1 loop
+            for Q in 1 .. S.Num_Queues loop
                if not S.Queues(Q).Is_Empty then
                   Highest_Ready := Q;
                   exit;
@@ -140,7 +140,7 @@ package body MLFQ is
 
       -- 4. Select New Process if CPU is idle
       if S.Is_Idle then
-         for Q in 0 .. S.Num_Queues - 1 loop
+         for Q in 1 .. S.Num_Queues loop
             if not S.Queues(Q).Is_Empty then
                S.Running_Proc := S.Queues(Q).First_Element;
                S.Queues(Q).Delete_First;
@@ -183,7 +183,7 @@ package body MLFQ is
 
          -- C) Time Allotment exhausted (Rule 4)
          elsif S.Running_Proc.Allotment_Left = 0 then
-            if S.Running_Proc.Priority < S.Num_Queues - 1 then
+            if S.Running_Proc.Priority < S.Num_Queues then
                S.Running_Proc.Priority := S.Running_Proc.Priority + 1;
             end if;
             S.Running_Proc.Allotment_Left := S.Quantums(S.Running_Proc.Priority);
@@ -203,7 +203,7 @@ package body MLFQ is
    begin
       if not S.Is_Idle then return False; end if;
       if not S.Blocked_List.Is_Empty then return False; end if;
-      for Q in 0 .. S.Num_Queues - 1 loop
+      for Q in 1 .. S.Num_Queues loop
          if not S.Queues(Q).Is_Empty then return False; end if;
       end loop;
       return True;
@@ -220,7 +220,7 @@ package body MLFQ is
 
    procedure Setup_And_Run_Example is
       S     : Scheduler (Num_Queues => 3);
-      Q_Arr : array (0 .. 2) of Natural := (0 => 2, 1 => 4, 2 => 8);
+      Q_Arr : array (1 .. 3) of Natural := (1 => 2, 2 => 4, 3 => 8);
    begin
       Initialize (S, Q_Arr, Aging_Interval => 25);
       
