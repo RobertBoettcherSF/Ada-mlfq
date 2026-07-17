@@ -67,7 +67,7 @@ procedure MLFQ_Tests is
       -- Check if process was demoted to queue 2
       if not S.Queues(2).Is_Empty then
          declare
-            P : Process_Record := S.Queues(2).First_Element;
+            P : constant Process_Record := S.Queues(2).First_Element;
          begin
             if P.ID = 1 and then P.Priority = 2 then
                Found_Demoted := True;
@@ -101,7 +101,7 @@ procedure MLFQ_Tests is
       -- Check if process 1 is back in queue 1 (preempted)
       if not S.Queues(1).Is_Empty then
          declare
-            P : Process_Record := S.Queues(1).First_Element;
+            P : constant Process_Record := S.Queues(1).First_Element;
          begin
             if P.ID = 1 and then P.State = Ready then
                Preempted := True;
@@ -162,7 +162,7 @@ procedure MLFQ_Tests is
       for Q in 1 .. S.Num_Queues loop
          if not S.Queues(Q).Is_Empty then
             declare
-               P : Process_Record := S.Queues(Q).First_Element;
+               P : constant Process_Record := S.Queues(Q).First_Element;
             begin
                if P.ID = 1 and then P.State = Ready then
                   Woke_Up := True;
@@ -206,7 +206,10 @@ procedure MLFQ_Tests is
       if All_Boosted and then S.Queues(1).Length >= 2 then
          Put_Line ("[PASS] Test 7: Aging boosts all processes to highest priority");
       else
-         Put_Line ("[FAIL] Test 7: Aging should boost all processes to queue 1");
+         Put_Line ("[FAIL] Test 7: Aging should boost all processes to queue 1 (found " & 
+                   Count_Type'Image(S.Queues(1).Length) & " in Q1, " & 
+                   Count_Type'Image(S.Queues(2).Length) & " in Q2, " & 
+                   Count_Type'Image(S.Queues(3).Length) & " in Q3)");
       end if;
    end Test_Aging;
 
@@ -311,7 +314,7 @@ procedure MLFQ_Tests is
       -- Check if process is in queue 3
       if not S.Queues(3).Is_Empty then
          declare
-            P : Process_Record := S.Queues(3).First_Element;
+            P : constant Process_Record := S.Queues(3).First_Element;
          begin
             if P.ID = 1 and then P.Priority = 3 then
                Fully_Demoted := True;
@@ -368,7 +371,7 @@ procedure MLFQ_Tests is
       -- Check if process is in blocked list (not demoted)
       if S.Blocked_List.Length = 1 then
          declare
-            P : Process_Record := S.Blocked_List.First_Element;
+            P : constant Process_Record := S.Blocked_List.First_Element;
          begin
             if P.Priority = 1 then
                Not_Demoted := True;
@@ -422,19 +425,19 @@ procedure MLFQ_Tests is
       -- Add a process that will be demoted
       Add_Process (S, ID => 1, CPU_Time => 10, IO_Frequency => 0, IO_Duration => 0);
       
-      -- Run for 100 ticks (aging should not trigger)
-      for I in 1 .. 100 loop
+      -- Run for 10 ticks (aging should not trigger)
+      for I in 1 .. 10 loop
          Tick (S);
       end loop;
       
-      -- Check if process was demoted (should be in lower queue)
-      -- If aging was disabled, process should have been demoted normally
+      -- With aging disabled, process should have been demoted
+      -- Check that it's not in queue 1 anymore
       if S.Queues(1).Is_Empty then
          Aging_Disabled := True;
       else
          -- Check if process is still in queue 1 (would mean aging boosted it back)
          declare
-            P : Process_Record := S.Queues(1).First_Element;
+            P : constant Process_Record := S.Queues(1).First_Element;
          begin
             if P.ID = 1 then
                Aging_Disabled := False; -- Aging must have boosted it

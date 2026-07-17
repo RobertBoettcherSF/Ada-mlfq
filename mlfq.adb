@@ -216,7 +216,7 @@ package body MLFQ is
 
    procedure Setup_And_Run_Example is
       S     : Scheduler;
-      Q_Arr : Quantum_Array := (1 => 2, 2 => 4, 3 => 8, others => 1);
+      Q_Arr : constant Quantum_Array := (1 => 2, 2 => 4, 3 => 8, others => 1);
    begin
       S.Num_Queues := 3;
       Initialize (S, Q_Arr, Aging_Interval => 25);
