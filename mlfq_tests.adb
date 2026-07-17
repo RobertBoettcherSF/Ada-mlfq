@@ -1,14 +1,17 @@
 with Ada.Text_IO; use Ada.Text_IO;
+with Ada.Containers; use Ada.Containers;
 with MLFQ;
 
 procedure MLFQ_Tests is
 
+   use MLFQ;
+
    -- Test helper: Run a simulation and capture if it completes
-   function Test_Completes (S : in out MLFQ.Scheduler) return Boolean is
+   function Test_Completes (S : in out Scheduler) return Boolean is
    begin
       for I in 1 .. 1000 loop
-         MLFQ.Tick (S);
-         if MLFQ.All_Finished (S) then
+         Tick (S);
+         if All_Finished (S) then
             return True;
          end if;
       end loop;
@@ -17,13 +20,13 @@ procedure MLFQ_Tests is
 
    -- Test 1: Empty scheduler should report all finished
    procedure Test_Empty_Scheduler is
-      S : MLFQ.Scheduler;
-      Q_Arr : MLFQ.Quantum_Array := (others => 1);
+      S : Scheduler;
+      Q_Arr : constant Quantum_Array := (others => 1);
    begin
       S.Num_Queues := 3;
-      MLFQ.Initialize (S, Q_Arr, Aging_Interval => 10);
+      Initialize (S, Q_Arr, Aging_Interval => 10);
       
-      if MLFQ.All_Finished (S) then
+      if All_Finished (S) then
          Put_Line ("[PASS] Test 1: Empty scheduler reports all finished");
       else
          Put_Line ("[FAIL] Test 1: Empty scheduler should report all finished");
@@ -32,12 +35,12 @@ procedure MLFQ_Tests is
 
    -- Test 2: Single process should complete
    procedure Test_Single_Process is
-      S : MLFQ.Scheduler;
-      Q_Arr : MLFQ.Quantum_Array := (1 => 5, others => 1);
+      S : Scheduler;
+      Q_Arr : constant Quantum_Array := (1 => 5, others => 1);
    begin
       S.Num_Queues := 3;
-      MLFQ.Initialize (S, Q_Arr, Aging_Interval => 100);
-      MLFQ.Add_Process (S, ID => 1, CPU_Time => 3, IO_Frequency => 0, IO_Duration => 0);
+      Initialize (S, Q_Arr, Aging_Interval => 100);
+      Add_Process (S, ID => 1, CPU_Time => 3, IO_Frequency => 0, IO_Duration => 0);
       
       if Test_Completes (S) and then S.Finished_List.Length = 1 then
          Put_Line ("[PASS] Test 2: Single process completes");
@@ -48,25 +51,25 @@ procedure MLFQ_Tests is
 
    -- Test 3: Process demotion after quantum expires
    procedure Test_Demotion is
-      S : MLFQ.Scheduler;
-      Q_Arr : MLFQ.Quantum_Array := (1 => 2, 2 => 4, others => 8);
+      S : Scheduler;
+      Q_Arr : constant Quantum_Array := (1 => 2, 2 => 4, others => 8);
       Found_Demoted : Boolean := False;
    begin
       S.Num_Queues := 3;
-      MLFQ.Initialize (S, Q_Arr, Aging_Interval => 100);
-      MLFQ.Add_Process (S, ID => 1, CPU_Time => 10, IO_Frequency => 0, IO_Duration => 0);
+      Initialize (S, Q_Arr, Aging_Interval => 100);
+      Add_Process (S, ID => 1, CPU_Time => 10, IO_Frequency => 0, IO_Duration => 0);
       
       -- Run for 3 ticks: should use quantum of 2, then get demoted
       for I in 1 .. 3 loop
-         MLFQ.Tick (S);
+         Tick (S);
       end loop;
       
       -- Check if process was demoted to queue 2
-      if not S.Queues(1).Is_Empty then
+      if not S.Queues(2).Is_Empty then
          declare
-            P : MLFQ.Process_Record := S.Queues(1).First_Element;
+            P : Process_Record := S.Queues(2).First_Element;
          begin
-            if P.Priority = 2 then
+            if P.ID = 1 and then P.Priority = 2 then
                Found_Demoted := True;
             end if;
          end;
@@ -81,26 +84,26 @@ procedure MLFQ_Tests is
 
    -- Test 4: New process preempts running process (Rule 1)
    procedure Test_Preemption is
-      S : MLFQ.Scheduler;
-      Q_Arr : MLFQ.Quantum_Array := (1 => 10, others => 1);
+      S : Scheduler;
+      Q_Arr : constant Quantum_Array := (1 => 10, others => 1);
       Preempted : Boolean := False;
    begin
       S.Num_Queues := 3;
-      MLFQ.Initialize (S, Q_Arr, Aging_Interval => 100);
-      MLFQ.Add_Process (S, ID => 1, CPU_Time => 100, IO_Frequency => 0, IO_Duration => 0);
+      Initialize (S, Q_Arr, Aging_Interval => 100);
+      Add_Process (S, ID => 1, CPU_Time => 100, IO_Frequency => 0, IO_Duration => 0);
       
       -- Run for 1 tick to start process 1
-      MLFQ.Tick (S);
+      Tick (S);
       
       -- Add a new process (should preempt)
-      MLFQ.Add_Process (S, ID => 2, CPU_Time => 5, IO_Frequency => 0, IO_Duration => 0);
+      Add_Process (S, ID => 2, CPU_Time => 5, IO_Frequency => 0, IO_Duration => 0);
       
       -- Check if process 1 is back in queue 1 (preempted)
-      if S.Queues(1).Length >= 1 then
+      if not S.Queues(1).Is_Empty then
          declare
-            P : MLFQ.Process_Record := S.Queues(1).First_Element;
+            P : Process_Record := S.Queues(1).First_Element;
          begin
-            if P.ID = 1 and then P.State = MLFQ.Ready then
+            if P.ID = 1 and then P.State = Ready then
                Preempted := True;
             end if;
          end;
@@ -115,17 +118,17 @@ procedure MLFQ_Tests is
 
    -- Test 5: I/O bound process yields and blocks
    procedure Test_IO_Yield is
-      S : MLFQ.Scheduler;
-      Q_Arr : MLFQ.Quantum_Array := (1 => 10, others => 1);
+      S : Scheduler;
+      Q_Arr : constant Quantum_Array := (1 => 10, others => 1);
       Blocked : Boolean := False;
    begin
       S.Num_Queues := 3;
-      MLFQ.Initialize (S, Q_Arr, Aging_Interval => 100);
-      MLFQ.Add_Process (S, ID => 1, CPU_Time => 10, IO_Frequency => 1, IO_Duration => 2);
+      Initialize (S, Q_Arr, Aging_Interval => 100);
+      Add_Process (S, ID => 1, CPU_Time => 10, IO_Frequency => 1, IO_Duration => 2);
       
       -- Run for 2 ticks: should yield after 1 tick
       for I in 1 .. 2 loop
-         MLFQ.Tick (S);
+         Tick (S);
       end loop;
       
       -- Check if process is in blocked list
@@ -142,26 +145,26 @@ procedure MLFQ_Tests is
 
    -- Test 6: Blocked process wakes up after I/O duration
    procedure Test_IO_Wakeup is
-      S : MLFQ.Scheduler;
-      Q_Arr : MLFQ.Quantum_Array := (1 => 10, others => 1);
+      S : Scheduler;
+      Q_Arr : constant Quantum_Array := (1 => 10, others => 1);
       Woke_Up : Boolean := False;
    begin
       S.Num_Queues := 3;
-      MLFQ.Initialize (S, Q_Arr, Aging_Interval => 100);
-      MLFQ.Add_Process (S, ID => 1, CPU_Time => 10, IO_Frequency => 1, IO_Duration => 2);
+      Initialize (S, Q_Arr, Aging_Interval => 100);
+      Add_Process (S, ID => 1, CPU_Time => 10, IO_Frequency => 1, IO_Duration => 2);
       
       -- Run for 4 ticks: should yield at tick 1, wake up at tick 3
       for I in 1 .. 4 loop
-         MLFQ.Tick (S);
+         Tick (S);
       end loop;
       
       -- Check if process woke up and is in a ready queue
       for Q in 1 .. S.Num_Queues loop
          if not S.Queues(Q).Is_Empty then
             declare
-               P : MLFQ.Process_Record := S.Queues(Q).First_Element;
+               P : Process_Record := S.Queues(Q).First_Element;
             begin
-               if P.ID = 1 and then P.State = MLFQ.Ready then
+               if P.ID = 1 and then P.State = Ready then
                   Woke_Up := True;
                end if;
             end;
@@ -177,20 +180,20 @@ procedure MLFQ_Tests is
 
    -- Test 7: Aging boosts all processes to highest priority
    procedure Test_Aging is
-      S : MLFQ.Scheduler;
-      Q_Arr : MLFQ.Quantum_Array := (1 => 2, 2 => 4, 3 => 8, others => 1);
+      S : Scheduler;
+      Q_Arr : constant Quantum_Array := (1 => 2, 2 => 4, 3 => 8, others => 1);
       All_Boosted : Boolean := True;
    begin
       S.Num_Queues := 3;
-      MLFQ.Initialize (S, Q_Arr, Aging_Interval => 5);
+      Initialize (S, Q_Arr, Aging_Interval => 5);
       
       -- Add processes that will be demoted
-      MLFQ.Add_Process (S, ID => 1, CPU_Time => 10, IO_Frequency => 0, IO_Duration => 0);
-      MLFQ.Add_Process (S, ID => 2, CPU_Time => 10, IO_Frequency => 0, IO_Duration => 0);
+      Add_Process (S, ID => 1, CPU_Time => 10, IO_Frequency => 0, IO_Duration => 0);
+      Add_Process (S, ID => 2, CPU_Time => 10, IO_Frequency => 0, IO_Duration => 0);
       
       -- Run for 5 ticks to trigger aging
       for I in 1 .. 5 loop
-         MLFQ.Tick (S);
+         Tick (S);
       end loop;
       
       -- Check if all processes are in queue 1
@@ -209,25 +212,25 @@ procedure MLFQ_Tests is
 
    -- Test 8: Multiple processes complete in correct order
    procedure Test_Multiple_Completion is
-      S : MLFQ.Scheduler;
-      Q_Arr : MLFQ.Quantum_Array := (1 => 10, others => 1);
+      S : Scheduler;
+      Q_Arr : constant Quantum_Array := (1 => 10, others => 1);
    begin
       S.Num_Queues := 3;
-      MLFQ.Initialize (S, Q_Arr, Aging_Interval => 100);
+      Initialize (S, Q_Arr, Aging_Interval => 100);
       
       -- Add short processes
-      MLFQ.Add_Process (S, ID => 1, CPU_Time => 2, IO_Frequency => 0, IO_Duration => 0);
-      MLFQ.Add_Process (S, ID => 2, CPU_Time => 1, IO_Frequency => 0, IO_Duration => 0);
-      MLFQ.Add_Process (S, ID => 3, CPU_Time => 3, IO_Frequency => 0, IO_Duration => 0);
+      Add_Process (S, ID => 1, CPU_Time => 2, IO_Frequency => 0, IO_Duration => 0);
+      Add_Process (S, ID => 2, CPU_Time => 1, IO_Frequency => 0, IO_Duration => 0);
+      Add_Process (S, ID => 3, CPU_Time => 3, IO_Frequency => 0, IO_Duration => 0);
       
       -- Run to completion
       for I in 1 .. 100 loop
-         MLFQ.Tick (S);
-         exit when MLFQ.All_Finished (S);
+         Tick (S);
+         exit when All_Finished (S);
       end loop;
       
       -- Check if all processes finished
-      if MLFQ.All_Finished (S) and then S.Finished_List.Length = 3 then
+      if All_Finished (S) and then S.Finished_List.Length = 3 then
          Put_Line ("[PASS] Test 8: Multiple processes complete");
       else
          Put_Line ("[FAIL] Test 8: All processes should complete");
@@ -236,32 +239,26 @@ procedure MLFQ_Tests is
 
    -- Test 9: Round Robin within same priority queue
    procedure Test_Round_Robin is
-      S : MLFQ.Scheduler;
-      Q_Arr : MLFQ.Quantum_Array := (1 => 2, others => 1);
+      S : Scheduler;
+      Q_Arr : constant Quantum_Array := (1 => 2, others => 1);
       Process_1_Ran : Boolean := False;
       Process_2_Ran : Boolean := False;
-      Process_1_Ran_Twice : Boolean := False;
    begin
       S.Num_Queues := 3;
-      MLFQ.Initialize (S, Q_Arr, Aging_Interval => 100);
+      Initialize (S, Q_Arr, Aging_Interval => 100);
       
       -- Add two processes to same queue
-      MLFQ.Add_Process (S, ID => 1, CPU_Time => 10, IO_Frequency => 0, IO_Duration => 0);
-      MLFQ.Add_Process (S, ID => 2, CPU_Time => 10, IO_Frequency => 0, IO_Duration => 0);
+      Add_Process (S, ID => 1, CPU_Time => 10, IO_Frequency => 0, IO_Duration => 0);
+      Add_Process (S, ID => 2, CPU_Time => 10, IO_Frequency => 0, IO_Duration => 0);
       
       -- Run for 5 ticks
       for I in 1 .. 5 loop
-         MLFQ.Tick (S);
+         Tick (S);
          
          -- Track which processes ran
          if not S.Is_Idle then
             if S.Running_Proc.ID = 1 then
                Process_1_Ran := True;
-               if Process_1_Ran_Twice then
-                  Process_1_Ran_Twice := True;
-               else
-                  Process_1_Ran_Twice := Process_1_Ran;
-               end if;
             elsif S.Running_Proc.ID = 2 then
                Process_2_Ran := True;
             end if;
@@ -278,18 +275,18 @@ procedure MLFQ_Tests is
 
    -- Test 10: Process with zero CPU time
    procedure Test_Zero_CPU is
-      S : MLFQ.Scheduler;
-      Q_Arr : MLFQ.Quantum_Array := (1 => 10, others => 1);
+      S : Scheduler;
+      Q_Arr : constant Quantum_Array := (1 => 10, others => 1);
    begin
       S.Num_Queues := 3;
-      MLFQ.Initialize (S, Q_Arr, Aging_Interval => 100);
-      MLFQ.Add_Process (S, ID => 1, CPU_Time => 0, IO_Frequency => 0, IO_Duration => 0);
+      Initialize (S, Q_Arr, Aging_Interval => 100);
+      Add_Process (S, ID => 1, CPU_Time => 0, IO_Frequency => 0, IO_Duration => 0);
       
       -- Run for 1 tick
-      MLFQ.Tick (S);
+      Tick (S);
       
       -- Process should finish immediately
-      if MLFQ.All_Finished (S) and then S.Finished_List.Length = 1 then
+      if All_Finished (S) and then S.Finished_List.Length = 1 then
          Put_Line ("[PASS] Test 10: Process with zero CPU time finishes immediately");
       else
          Put_Line ("[FAIL] Test 10: Process with zero CPU time should finish");
@@ -298,23 +295,23 @@ procedure MLFQ_Tests is
 
    -- Test 11: Process demoted through all queues
    procedure Test_Full_Demotion is
-      S : MLFQ.Scheduler;
-      Q_Arr : MLFQ.Quantum_Array := (1 => 1, 2 => 1, 3 => 1, others => 1);
+      S : Scheduler;
+      Q_Arr : constant Quantum_Array := (1 => 1, 2 => 1, 3 => 1, others => 1);
       Fully_Demoted : Boolean := False;
    begin
       S.Num_Queues := 3;
-      MLFQ.Initialize (S, Q_Arr, Aging_Interval => 100);
-      MLFQ.Add_Process (S, ID => 1, CPU_Time => 10, IO_Frequency => 0, IO_Duration => 0);
+      Initialize (S, Q_Arr, Aging_Interval => 100);
+      Add_Process (S, ID => 1, CPU_Time => 10, IO_Frequency => 0, IO_Duration => 0);
       
       -- Run for 3 ticks: should be demoted from 1 -> 2 -> 3
       for I in 1 .. 3 loop
-         MLFQ.Tick (S);
+         Tick (S);
       end loop;
       
       -- Check if process is in queue 3
       if not S.Queues(3).Is_Empty then
          declare
-            P : MLFQ.Process_Record := S.Queues(3).First_Element;
+            P : Process_Record := S.Queues(3).First_Element;
          begin
             if P.ID = 1 and then P.Priority = 3 then
                Fully_Demoted := True;
@@ -331,16 +328,16 @@ procedure MLFQ_Tests is
 
    -- Test 12: CPU stays idle when no processes
    procedure Test_Idle_CPU is
-      S : MLFQ.Scheduler;
-      Q_Arr : MLFQ.Quantum_Array := (1 => 10, others => 1);
+      S : Scheduler;
+      Q_Arr : constant Quantum_Array := (1 => 10, others => 1);
       Was_Idle : Boolean := True;
    begin
       S.Num_Queues := 3;
-      MLFQ.Initialize (S, Q_Arr, Aging_Interval => 100);
+      Initialize (S, Q_Arr, Aging_Interval => 100);
       
       -- Run for 5 ticks with no processes
       for I in 1 .. 5 loop
-         MLFQ.Tick (S);
+         Tick (S);
          if not S.Is_Idle then
             Was_Idle := False;
          end if;
@@ -355,23 +352,23 @@ procedure MLFQ_Tests is
 
    -- Test 13: Process doesn't demote if it yields for I/O
    procedure Test_IO_No_Demotion is
-      S : MLFQ.Scheduler;
-      Q_Arr : MLFQ.Quantum_Array := (1 => 10, others => 1);
+      S : Scheduler;
+      Q_Arr : constant Quantum_Array := (1 => 10, others => 1);
       Not_Demoted : Boolean := True;
    begin
       S.Num_Queues := 3;
-      MLFQ.Initialize (S, Q_Arr, Aging_Interval => 100);
-      MLFQ.Add_Process (S, ID => 1, CPU_Time => 10, IO_Frequency => 1, IO_Duration => 2);
+      Initialize (S, Q_Arr, Aging_Interval => 100);
+      Add_Process (S, ID => 1, CPU_Time => 10, IO_Frequency => 1, IO_Duration => 2);
       
       -- Run for 2 ticks: should yield for I/O at tick 1
       for I in 1 .. 2 loop
-         MLFQ.Tick (S);
+         Tick (S);
       end loop;
       
       -- Check if process is in blocked list (not demoted)
       if S.Blocked_List.Length = 1 then
          declare
-            P : MLFQ.Process_Record := S.Blocked_List.First_Element;
+            P : Process_Record := S.Blocked_List.First_Element;
          begin
             if P.Priority = 1 then
                Not_Demoted := True;
@@ -392,12 +389,12 @@ procedure MLFQ_Tests is
 
    -- Test 14: Multiple queues with different quantums
    procedure Test_Different_Quantums is
-      S : MLFQ.Scheduler;
-      Q_Arr : MLFQ.Quantum_Array := (1 => 1, 2 => 2, 3 => 4, others => 1);
+      S : Scheduler;
+      Q_Arr : constant Quantum_Array := (1 => 1, 2 => 2, 3 => 4, others => 1);
       Quantum_Correct : Boolean := True;
    begin
       S.Num_Queues := 3;
-      MLFQ.Initialize (S, Q_Arr, Aging_Interval => 100);
+      Initialize (S, Q_Arr, Aging_Interval => 100);
       
       -- Check if quantums were set correctly
       if S.Quantums(1) = 1 and then S.Quantums(2) = 2 and then S.Quantums(3) = 4 then
@@ -415,19 +412,19 @@ procedure MLFQ_Tests is
 
    -- Test 15: Aging interval of zero disables aging
    procedure Test_No_Aging is
-      S : MLFQ.Scheduler;
-      Q_Arr : MLFQ.Quantum_Array := (1 => 1, others => 1);
+      S : Scheduler;
+      Q_Arr : constant Quantum_Array := (1 => 1, others => 1);
       Aging_Disabled : Boolean := True;
    begin
       S.Num_Queues := 3;
-      MLFQ.Initialize (S, Q_Arr, Aging_Interval => 0);
+      Initialize (S, Q_Arr, Aging_Interval => 0);
       
       -- Add a process that will be demoted
-      MLFQ.Add_Process (S, ID => 1, CPU_Time => 10, IO_Frequency => 0, IO_Duration => 0);
+      Add_Process (S, ID => 1, CPU_Time => 10, IO_Frequency => 0, IO_Duration => 0);
       
       -- Run for 100 ticks (aging should not trigger)
       for I in 1 .. 100 loop
-         MLFQ.Tick (S);
+         Tick (S);
       end loop;
       
       -- Check if process was demoted (should be in lower queue)
@@ -437,7 +434,7 @@ procedure MLFQ_Tests is
       else
          -- Check if process is still in queue 1 (would mean aging boosted it back)
          declare
-            P : MLFQ.Process_Record := S.Queues(1).First_Element;
+            P : Process_Record := S.Queues(1).First_Element;
          begin
             if P.ID = 1 then
                Aging_Disabled := False; -- Aging must have boosted it
