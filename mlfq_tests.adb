@@ -194,12 +194,16 @@ procedure MLFQ_Tests is
    begin
       S.Num_Queues := 3;
       Initialize (S, Q_Arr, Aging_Interval => 100);
-      Add_Process (S, ID => 1, CPU_Time => 10, IO_Frequency => 1, IO_Duration => 2);
       
-      -- Run until process wakes up (should take IO_Duration + 1 ticks)
-      -- Tick 0: Process yields for I/O (Current_IO_Wait = 2)
-      -- Tick 1: Current_IO_Wait decrements to 1
-      -- Tick 2: Current_IO_Wait decrements to 0, process wakes up
+      -- Use a longer IO_Frequency so process doesn't yield immediately after waking up
+      Add_Process (S, ID => 1, CPU_Time => 10, IO_Frequency => 3, IO_Duration => 2);
+      
+      -- Run until process wakes up
+      -- Tick 0: Process runs, Ticks_Since_Yield=1 < IO_Frequency=3, continues
+      -- Tick 1: Process runs, Ticks_Since_Yield=2 < IO_Frequency=3, continues
+      -- Tick 2: Process runs, Ticks_Since_Yield=3 >= IO_Frequency=3, yields for I/O
+      -- Tick 3: I/O check decrements Current_IO_Wait from 2 to 1
+      -- Tick 4: I/O check decrements Current_IO_Wait from 1 to 0, process wakes up to Ready
       for I in 1 .. 10 loop
          Tick (S);
          P := Find_Process (S, 1);
@@ -214,7 +218,8 @@ procedure MLFQ_Tests is
       else
          Put_Line ("[FAIL] Test 6: Blocked process should wake up (State=" & 
                    Process_State'Image(P.State) & ", Current_IO_Wait=" & 
-                   Natural'Image(P.Current_IO_Wait) & ")");
+                   Natural'Image(P.Current_IO_Wait) & ", Ticks_Since_Yield=" & 
+                   Natural'Image(P.Ticks_Since_Yield) & ")");
       end if;
    end Test_IO_Wakeup;
 
