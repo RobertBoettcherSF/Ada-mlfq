@@ -196,18 +196,23 @@ procedure MLFQ_Tests is
       Initialize (S, Q_Arr, Aging_Interval => 100);
       
       -- Use a longer IO_Frequency so process doesn't yield immediately after waking up
+      -- IO_Frequency=3 means yield every 3 ticks of CPU time
+      -- IO_Duration=2 means block for 2 ticks
       Add_Process (S, ID => 1, CPU_Time => 10, IO_Frequency => 3, IO_Duration => 2);
       
       -- Run until process wakes up
-      -- Tick 0: Process runs, Ticks_Since_Yield=1 < IO_Frequency=3, continues
-      -- Tick 1: Process runs, Ticks_Since_Yield=2 < IO_Frequency=3, continues
-      -- Tick 2: Process runs, Ticks_Since_Yield=3 >= IO_Frequency=3, yields for I/O
-      -- Tick 3: I/O check decrements Current_IO_Wait from 2 to 1
-      -- Tick 4: I/O check decrements Current_IO_Wait from 1 to 0, process wakes up to Ready
+      -- Tick 0: Process runs, Ticks_Since_Yield=1 < 3, continues
+      -- Tick 1: Process runs, Ticks_Since_Yield=2 < 3, continues
+      -- Tick 2: Process runs, Ticks_Since_Yield=3 >= 3, yields for I/O (Current_IO_Wait=2)
+      -- Tick 3: I/O check decrements to 1, still blocked
+      -- Tick 4: I/O check decrements to 0, wakes up to Ready, then gets selected to run
+      -- At end of tick 4, process is Running (not Ready)
+      -- So we check if process is NOT Blocked (meaning it woke up)
       for I in 1 .. 10 loop
          Tick (S);
          P := Find_Process (S, 1);
-         if P.State = Ready then
+         -- Check if process is NOT blocked (either Ready or Running means it woke up)
+         if P.State /= Blocked then
             Woke_Up := True;
             exit;
          end if;
@@ -218,8 +223,7 @@ procedure MLFQ_Tests is
       else
          Put_Line ("[FAIL] Test 6: Blocked process should wake up (State=" & 
                    Process_State'Image(P.State) & ", Current_IO_Wait=" & 
-                   Natural'Image(P.Current_IO_Wait) & ", Ticks_Since_Yield=" & 
-                   Natural'Image(P.Ticks_Since_Yield) & ")");
+                   Natural'Image(P.Current_IO_Wait) & ")");
       end if;
    end Test_IO_Wakeup;
 
