@@ -121,29 +121,35 @@ procedure MLFQ_Tests is
       end if;
    end Test_Demotion;
 
-   -- Test 4: New process preempts running process (Rule 1)
+   -- Test 4: Higher priority process preempts lower priority (Rule 1)
    procedure Test_Preemption is
       S : Scheduler;
-      Q_Arr : constant Quantum_Array := (1 => 10, others => 1);
-      P1 : Process_Record;
+      Q_Arr : constant Quantum_Array := (1 => 10, 2 => 10, others => 1);
+      P1, P2 : Process_Record;
    begin
       S.Num_Queues := 3;
       Initialize (S, Q_Arr, Aging_Interval => 100);
+      
+      -- Add process to queue 2 (lower priority)
       Add_Process (S, ID => 1, CPU_Time => 100, IO_Frequency => 0, IO_Duration => 0);
+      S.Running_Proc.Priority := 2;  -- Force it to queue 2
+      S.Running_Proc.State := Running;
+      S.Is_Idle := False;
       
-      -- Run for 1 tick to start process 1
-      Tick (S);
-      
-      -- Add a new process (should preempt)
+      -- Add a new process to queue 1 (higher priority)
       Add_Process (S, ID => 2, CPU_Time => 5, IO_Frequency => 0, IO_Duration => 0);
       
-      -- Check if process 1 is in queue 1 (preempted) and process 2 is running
+      -- Run one tick - should preempt
+      Tick (S);
+      
+      -- Check if process 1 was preempted and process 2 is running
       P1 := Find_Process (S, 1);
-      if P1.ID = 1 and then P1.State = Ready and then P1.Priority = 1 then
-         Put_Line ("[PASS] Test 4: New process preempts running process");
+      P2 := Find_Process (S, 2);
+      if P1.State = Ready and then P2.State = Running then
+         Put_Line ("[PASS] Test 4: Higher priority process preempts lower priority");
       else
-         Put_Line ("[FAIL] Test 4: New process should preempt running process (State=" & 
-                   Process_State'Image(P1.State) & ", Priority=" & Natural'Image(P1.Priority) & ")");
+         Put_Line ("[FAIL] Test 4: Higher priority should preempt lower (P1=" & 
+                   Process_State'Image(P1.State) & ", P2=" & Process_State'Image(P2.State) & ")");
       end if;
    end Test_Preemption;
 
@@ -193,7 +199,8 @@ procedure MLFQ_Tests is
          Put_Line ("[PASS] Test 6: Blocked process wakes up after I/O duration");
       else
          Put_Line ("[FAIL] Test 6: Blocked process should wake up (State=" & 
-                   Process_State'Image(P.State) & ")");
+                   Process_State'Image(P.State) & ", Current_IO_Wait=" & 
+                   Natural'Image(P.Current_IO_Wait) & ")");
       end if;
    end Test_IO_Wakeup;
 
