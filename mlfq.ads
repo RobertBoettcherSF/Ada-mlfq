@@ -24,13 +24,10 @@ package MLFQ is
 
    package Process_Lists is new Ada.Containers.Doubly_Linked_Lists (Process_Record);
 
-   type Queue_Array is array (Natural range <>) of Process_Lists.List;
-   type Quantum_Array is array (Natural range <>) of Natural;
-
    -- The Scheduler record. The discriminant Num_Queues allows dynamic sizing.
    type Scheduler (Num_Queues : Positive) is tagged record
-      Queues            : Queue_Array (0 .. Num_Queues - 1);
-      Quantums          : Quantum_Array (0 .. Num_Queues - 1);
+      Queues            : array (0 .. Num_Queues - 1) of Process_Lists.List;
+      Quantums          : array (0 .. Num_Queues - 1) of Natural;
       Blocked_List      : Process_Lists.List;
       Finished_List     : Process_Lists.List;
       Aging_Interval    : Natural := 0;
@@ -42,7 +39,7 @@ package MLFQ is
 
    -- Configures the scheduler
    procedure Initialize (S              : in out Scheduler;
-                         Quantums       : in Quantum_Array;
+                         Quantums       : in array (Natural range <>) of Natural;
                          Aging_Interval : in Natural);
 
    -- Adds a new job to the top queue (Rule 3)

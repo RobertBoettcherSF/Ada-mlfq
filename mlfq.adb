@@ -3,7 +3,7 @@ with Ada.Text_IO; use Ada.Text_IO;
 package body MLFQ is
 
    procedure Initialize (S              : in out Scheduler;
-                         Quantums       : in Quantum_Array;
+                         Quantums       : in array (Natural range <>) of Natural;
                          Aging_Interval : in Natural) is
    begin
       -- Clear any existing state
@@ -220,7 +220,7 @@ package body MLFQ is
 
    procedure Setup_And_Run_Example is
       S     : Scheduler (Num_Queues => 3);
-      Q_Arr : Quantum_Array (0 .. 2) := (0 => 2, 1 => 4, 2 => 8);
+      Q_Arr : array (0 .. 2) of Natural := (0 => 2, 1 => 4, 2 => 8);
    begin
       Initialize (S, Q_Arr, Aging_Interval => 25);
       
