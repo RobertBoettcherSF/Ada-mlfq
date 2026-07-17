@@ -3,23 +3,19 @@ with Ada.Text_IO; use Ada.Text_IO;
 package body MLFQ is
 
    procedure Initialize (S              : in out Scheduler;
-                         Quantums       : in array (Positive range <>) of Natural;
+                         Quantums       : in Quantum_Array;
                          Aging_Interval : in Natural) is
    begin
       -- Clear any existing state
-      for I in S.Queues'Range loop
+      for I in 1 .. S.Num_Queues loop
          S.Queues(I).Clear;
       end loop;
       S.Blocked_List.Clear;
       S.Finished_List.Clear;
       
-      -- Load quantums. Fallback to 1 if not enough are provided.
-      for I in S.Quantums'Range loop
-         if Quantums'First + I - S.Quantums'First <= Quantums'Last then
-            S.Quantums(I) := Quantums(Quantums'First + (I - S.Quantums'First));
-         else
-            S.Quantums(I) := 1;
-         end if;
+      -- Load quantums
+      for I in 1 .. S.Num_Queues loop
+         S.Quantums(I) := Quantums(I);
       end loop;
       
       S.Aging_Interval := Aging_Interval;
@@ -219,9 +215,10 @@ package body MLFQ is
    end Run_Simulation;
 
    procedure Setup_And_Run_Example is
-      S     : Scheduler (Num_Queues => 3);
-      Q_Arr : array (1 .. 3) of Natural := (1 => 2, 2 => 4, 3 => 8);
+      S     : Scheduler;
+      Q_Arr : Quantum_Array := (1 => 2, 2 => 4, 3 => 8, others => 1);
    begin
+      S.Num_Queues := 3;
       Initialize (S, Q_Arr, Aging_Interval => 25);
       
       -- Job 1: Long running CPU bound task
