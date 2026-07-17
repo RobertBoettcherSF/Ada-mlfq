@@ -6,6 +6,47 @@ procedure MLFQ_Tests is
 
    use MLFQ;
 
+   -- Test helper: Check if a process with given ID is in any queue or running
+   function Find_Process (S : Scheduler; ID : Process_ID) return Process_Record is
+      P : Process_Record;
+   begin
+      -- Check running process
+      if not S.Is_Idle and then S.Running_Proc.ID = ID then
+         return S.Running_Proc;
+      end if;
+      
+      -- Check all queues
+      for Q in 1 .. S.Num_Queues loop
+         if not S.Queues(Q).Is_Empty then
+            for C in S.Queues(Q).Iterate loop
+               P := S.Queues(Q).Element (C);
+               if P.ID = ID then
+                  return P;
+               end if;
+            end loop;
+         end if;
+      end loop;
+      
+      -- Check blocked list
+      for C in S.Blocked_List.Iterate loop
+         P := S.Blocked_List.Element (C);
+         if P.ID = ID then
+            return P;
+         end if;
+      end loop;
+      
+      -- Check finished list
+      for C in S.Finished_List.Iterate loop
+         P := S.Finished_List.Element (C);
+         if P.ID = ID then
+            return P;
+         end if;
+      end loop;
+      
+      -- Not found
+      return Process_Record'(ID => 0, others => <>);
+   end Find_Process;
+
    -- Test helper: Run a simulation and capture if it completes
    function Test_Completes (S : in out Scheduler) return Boolean is
    begin
@@ -53,7 +94,7 @@ procedure MLFQ_Tests is
    procedure Test_Demotion is
       S : Scheduler;
       Q_Arr : constant Quantum_Array := (1 => 2, 2 => 4, others => 8);
-      Found_Demoted : Boolean := False;
+      P : Process_Record;
    begin
       S.Num_Queues := 3;
       Initialize (S, Q_Arr, Aging_Interval => 100);
@@ -64,21 +105,13 @@ procedure MLFQ_Tests is
          Tick (S);
       end loop;
       
-      -- Check if process was demoted to queue 2
-      if not S.Queues(2).Is_Empty then
-         declare
-            P : constant Process_Record := S.Queues(2).First_Element;
-         begin
-            if P.ID = 1 and then P.Priority = 2 then
-               Found_Demoted := True;
-            end if;
-         end;
-      end if;
-      
-      if Found_Demoted then
+      -- Check if process was demoted to queue 2 (could be running or in queue)
+      P := Find_Process (S, 1);
+      if P.ID = 1 and then P.Priority = 2 then
          Put_Line ("[PASS] Test 3: Process demoted after quantum expires");
       else
-         Put_Line ("[FAIL] Test 3: Process should be demoted to queue 2 after quantum");
+         Put_Line ("[FAIL] Test 3: Process should be demoted to queue 2 after quantum (Priority=" & 
+                   Natural'Image(P.Priority) & ")");
       end if;
    end Test_Demotion;
 
@@ -86,7 +119,7 @@ procedure MLFQ_Tests is
    procedure Test_Preemption is
       S : Scheduler;
       Q_Arr : constant Quantum_Array := (1 => 10, others => 1);
-      Preempted : Boolean := False;
+      P1 : Process_Record;
    begin
       S.Num_Queues := 3;
       Initialize (S, Q_Arr, Aging_Interval => 100);
@@ -98,21 +131,13 @@ procedure MLFQ_Tests is
       -- Add a new process (should preempt)
       Add_Process (S, ID => 2, CPU_Time => 5, IO_Frequency => 0, IO_Duration => 0);
       
-      -- Check if process 1 is back in queue 1 (preempted)
-      if not S.Queues(1).Is_Empty then
-         declare
-            P : constant Process_Record := S.Queues(1).First_Element;
-         begin
-            if P.ID = 1 and then P.State = Ready then
-               Preempted := True;
-            end if;
-         end;
-      end if;
-      
-      if Preempted then
+      -- Check if process 1 is in queue 1 (preempted) and process 2 is running
+      P1 := Find_Process (S, 1);
+      if P1.ID = 1 and then P1.State = Ready and then P1.Priority = 1 then
          Put_Line ("[PASS] Test 4: New process preempts running process");
       else
-         Put_Line ("[FAIL] Test 4: New process should preempt running process");
+         Put_Line ("[FAIL] Test 4: New process should preempt running process (State=" & 
+                   Process_State'Image(P1.State) & ", Priority=" & Natural'Image(P1.Priority) & ")");
       end if;
    end Test_Preemption;
 
@@ -120,7 +145,7 @@ procedure MLFQ_Tests is
    procedure Test_IO_Yield is
       S : Scheduler;
       Q_Arr : constant Quantum_Array := (1 => 10, others => 1);
-      Blocked : Boolean := False;
+      P : Process_Record;
    begin
       S.Num_Queues := 3;
       Initialize (S, Q_Arr, Aging_Interval => 100);
@@ -132,14 +157,12 @@ procedure MLFQ_Tests is
       end loop;
       
       -- Check if process is in blocked list
-      if S.Blocked_List.Length = 1 then
-         Blocked := True;
-      end if;
-      
-      if Blocked then
+      P := Find_Process (S, 1);
+      if P.State = Blocked then
          Put_Line ("[PASS] Test 5: I/O bound process yields and blocks");
       else
-         Put_Line ("[FAIL] Test 5: I/O bound process should be blocked after yielding");
+         Put_Line ("[FAIL] Test 5: I/O bound process should be blocked (State=" & 
+                   Process_State'Image(P.State) & ")");
       end if;
    end Test_IO_Yield;
 
@@ -147,7 +170,7 @@ procedure MLFQ_Tests is
    procedure Test_IO_Wakeup is
       S : Scheduler;
       Q_Arr : constant Quantum_Array := (1 => 10, others => 1);
-      Woke_Up : Boolean := False;
+      P : Process_Record;
    begin
       S.Num_Queues := 3;
       Initialize (S, Q_Arr, Aging_Interval => 100);
@@ -158,23 +181,13 @@ procedure MLFQ_Tests is
          Tick (S);
       end loop;
       
-      -- Check if process woke up and is in a ready queue
-      for Q in 1 .. S.Num_Queues loop
-         if not S.Queues(Q).Is_Empty then
-            declare
-               P : constant Process_Record := S.Queues(Q).First_Element;
-            begin
-               if P.ID = 1 and then P.State = Ready then
-                  Woke_Up := True;
-               end if;
-            end;
-         end if;
-      end loop;
-      
-      if Woke_Up then
+      -- Check if process woke up and is ready
+      P := Find_Process (S, 1);
+      if P.State = Ready then
          Put_Line ("[PASS] Test 6: Blocked process wakes up after I/O duration");
       else
-         Put_Line ("[FAIL] Test 6: Blocked process should wake up after I/O duration");
+         Put_Line ("[FAIL] Test 6: Blocked process should wake up (State=" & 
+                   Process_State'Image(P.State) & ")");
       end if;
    end Test_IO_Wakeup;
 
@@ -182,7 +195,7 @@ procedure MLFQ_Tests is
    procedure Test_Aging is
       S : Scheduler;
       Q_Arr : constant Quantum_Array := (1 => 2, 2 => 4, 3 => 8, others => 1);
-      All_Boosted : Boolean := True;
+      P1, P2 : Process_Record;
    begin
       S.Num_Queues := 3;
       Initialize (S, Q_Arr, Aging_Interval => 5);
@@ -196,20 +209,15 @@ procedure MLFQ_Tests is
          Tick (S);
       end loop;
       
-      -- Check if all processes are in queue 1
-      for Q in 2 .. S.Num_Queues loop
-         if not S.Queues(Q).Is_Empty then
-            All_Boosted := False;
-         end if;
-      end loop;
+      -- Check if all processes are at priority 1
+      P1 := Find_Process (S, 1);
+      P2 := Find_Process (S, 2);
       
-      if All_Boosted and then S.Queues(1).Length >= 2 then
+      if P1.Priority = 1 and then P2.Priority = 1 then
          Put_Line ("[PASS] Test 7: Aging boosts all processes to highest priority");
       else
-         Put_Line ("[FAIL] Test 7: Aging should boost all processes to queue 1 (found " & 
-                   Count_Type'Image(S.Queues(1).Length) & " in Q1, " & 
-                   Count_Type'Image(S.Queues(2).Length) & " in Q2, " & 
-                   Count_Type'Image(S.Queues(3).Length) & " in Q3)");
+         Put_Line ("[FAIL] Test 7: Aging should boost all processes to priority 1 (P1=" & 
+                   Natural'Image(P1.Priority) & ", P2=" & Natural'Image(P2.Priority) & ")");
       end if;
    end Test_Aging;
 
@@ -236,7 +244,8 @@ procedure MLFQ_Tests is
       if All_Finished (S) and then S.Finished_List.Length = 3 then
          Put_Line ("[PASS] Test 8: Multiple processes complete");
       else
-         Put_Line ("[FAIL] Test 8: All processes should complete");
+         Put_Line ("[FAIL] Test 8: All processes should complete (Finished=" & 
+                   Count_Type'Image(S.Finished_List.Length) & ")");
       end if;
    end Test_Multiple_Completion;
 
@@ -300,7 +309,7 @@ procedure MLFQ_Tests is
    procedure Test_Full_Demotion is
       S : Scheduler;
       Q_Arr : constant Quantum_Array := (1 => 1, 2 => 1, 3 => 1, others => 1);
-      Fully_Demoted : Boolean := False;
+      P : Process_Record;
    begin
       S.Num_Queues := 3;
       Initialize (S, Q_Arr, Aging_Interval => 100);
@@ -311,21 +320,13 @@ procedure MLFQ_Tests is
          Tick (S);
       end loop;
       
-      -- Check if process is in queue 3
-      if not S.Queues(3).Is_Empty then
-         declare
-            P : constant Process_Record := S.Queues(3).First_Element;
-         begin
-            if P.ID = 1 and then P.Priority = 3 then
-               Fully_Demoted := True;
-            end if;
-         end;
-      end if;
-      
-      if Fully_Demoted then
+      -- Check if process is at priority 3
+      P := Find_Process (S, 1);
+      if P.ID = 1 and then P.Priority = 3 then
          Put_Line ("[PASS] Test 11: Process demoted through all queues");
       else
-         Put_Line ("[FAIL] Test 11: Process should be demoted to lowest queue");
+         Put_Line ("[FAIL] Test 11: Process should be at priority 3 (Priority=" & 
+                   Natural'Image(P.Priority) & ")");
       end if;
    end Test_Full_Demotion;
 
@@ -357,7 +358,7 @@ procedure MLFQ_Tests is
    procedure Test_IO_No_Demotion is
       S : Scheduler;
       Q_Arr : constant Quantum_Array := (1 => 10, others => 1);
-      Not_Demoted : Boolean := True;
+      P : Process_Record;
    begin
       S.Num_Queues := 3;
       Initialize (S, Q_Arr, Aging_Interval => 100);
@@ -368,25 +369,13 @@ procedure MLFQ_Tests is
          Tick (S);
       end loop;
       
-      -- Check if process is in blocked list (not demoted)
-      if S.Blocked_List.Length = 1 then
-         declare
-            P : constant Process_Record := S.Blocked_List.First_Element;
-         begin
-            if P.Priority = 1 then
-               Not_Demoted := True;
-            else
-               Not_Demoted := False;
-            end if;
-         end;
-      else
-         Not_Demoted := False;
-      end if;
-      
-      if Not_Demoted then
+      -- Check if process is blocked (not demoted)
+      P := Find_Process (S, 1);
+      if P.State = Blocked and then P.Priority = 1 then
          Put_Line ("[PASS] Test 13: I/O yielding process doesn't get demoted");
       else
-         Put_Line ("[FAIL] Test 13: I/O yielding process should stay at same priority");
+         Put_Line ("[FAIL] Test 13: I/O yielding process should stay at priority 1 (State=" & 
+                   Process_State'Image(P.State) & ", Priority=" & Natural'Image(P.Priority) & ")");
       end if;
    end Test_IO_No_Demotion;
 
@@ -409,7 +398,9 @@ procedure MLFQ_Tests is
       if Quantum_Correct then
          Put_Line ("[PASS] Test 14: Different quantums per queue are set correctly");
       else
-         Put_Line ("[FAIL] Test 14: Quantums should be set to specified values");
+         Put_Line ("[FAIL] Test 14: Quantums should be (1,2,4), got (" & 
+                   Natural'Image(S.Quantums(1)) & "," & Natural'Image(S.Quantums(2)) & "," & 
+                   Natural'Image(S.Quantums(3)) & ")");
       end if;
    end Test_Different_Quantums;
 
@@ -417,7 +408,7 @@ procedure MLFQ_Tests is
    procedure Test_No_Aging is
       S : Scheduler;
       Q_Arr : constant Quantum_Array := (1 => 1, others => 1);
-      Aging_Disabled : Boolean := True;
+      P : Process_Record;
    begin
       S.Num_Queues := 3;
       Initialize (S, Q_Arr, Aging_Interval => 0);
@@ -431,27 +422,12 @@ procedure MLFQ_Tests is
       end loop;
       
       -- With aging disabled, process should have been demoted
-      -- Check that it's not in queue 1 anymore
-      if S.Queues(1).Is_Empty then
-         Aging_Disabled := True;
-      else
-         -- Check if process is still in queue 1 (would mean aging boosted it back)
-         declare
-            P : constant Process_Record := S.Queues(1).First_Element;
-         begin
-            if P.ID = 1 then
-               Aging_Disabled := False; -- Aging must have boosted it
-            end if;
-         exception
-            when others =>
-               Aging_Disabled := True;
-         end;
-      end if;
-      
-      if Aging_Disabled then
+      P := Find_Process (S, 1);
+      if P.Priority > 1 then
          Put_Line ("[PASS] Test 15: Aging interval of zero disables aging");
       else
-         Put_Line ("[FAIL] Test 15: Aging should be disabled when interval is zero");
+         Put_Line ("[FAIL] Test 15: Process should be demoted with aging disabled (Priority=" & 
+                   Natural'Image(P.Priority) & ")");
       end if;
    end Test_No_Aging;
 
