@@ -5,10 +5,12 @@ with MLFQ;
 procedure MLFQ_Tests is
 
    use MLFQ;
+   use Process_Lists;
 
    -- Test helper: Check if a process with given ID is in any queue or running
    function Find_Process (S : Scheduler; ID : Process_ID) return Process_Record is
       P : Process_Record;
+      C : Cursor;
    begin
       -- Check running process
       if not S.Is_Idle and then S.Running_Proc.ID = ID then
@@ -17,30 +19,34 @@ procedure MLFQ_Tests is
       
       -- Check all queues
       for Q in 1 .. S.Num_Queues loop
-         if not S.Queues(Q).Is_Empty then
-            for C in S.Queues(Q).Iterate loop
-               P := S.Queues(Q).Element (C);
-               if P.ID = ID then
-                  return P;
-               end if;
-            end loop;
-         end if;
+         C := S.Queues(Q).First;
+         while Has_Element (C) loop
+            P := Element (C);
+            if P.ID = ID then
+               return P;
+            end if;
+            Next (C);
+         end loop;
       end loop;
       
       -- Check blocked list
-      for C in S.Blocked_List.Iterate loop
-         P := S.Blocked_List.Element (C);
+      C := S.Blocked_List.First;
+      while Has_Element (C) loop
+         P := Element (C);
          if P.ID = ID then
             return P;
          end if;
+         Next (C);
       end loop;
       
       -- Check finished list
-      for C in S.Finished_List.Iterate loop
-         P := S.Finished_List.Element (C);
+      C := S.Finished_List.First;
+      while Has_Element (C) loop
+         P := Element (C);
          if P.ID = ID then
             return P;
          end if;
+         Next (C);
       end loop;
       
       -- Not found
